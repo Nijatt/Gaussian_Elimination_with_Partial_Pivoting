@@ -1,0 +1,229 @@
+#Problem 5.1
+
+'''Find the currents in the unbalanced Wheatstone bridge (Fig. 5.1).
+    Assume that v0 =1.5 V,r1 =r2 =100 Ohm, r3 =150 Ohm, rx =120 Ohm, ra =1000 Ohm, and rs =10 Ohm. '''
+
+#Imported packages for furhter use.
+import numpy as np
+import matplotlib.pyplot as plt
+import math
+
+
+#Given variables.
+v_0=1.5 #V
+r_1=100 #Ohm
+r_2=100 #Ohm
+r_3=150 #Ohm
+r_x=120 #Ohm
+r_a=1000 #Ohm
+r_s=10 #Ohm
+
+#Generate R matrix from given Resistance variables
+# .
+R=np.array([[r_s ,        r_1, r_2],
+            [-r_x,r_1+r_x+r_a,-r_a],
+            [-r_3,-r_a,r_2+r_3+r_a]])
+
+#Generate 1xN matrix from given Voltage variables.
+V=np.array([v_0,0,0])
+
+#==================================Methods for Gaussian Elimination=====================================================
+
+def matrix_copy(array,start=0):
+    '''This function copies any matrix to another dummy matrix and returns as matrix array.
+    Input -  2D array:
+    Return -  2D array of same variables.'''
+
+    new_array=[] #Zero dummy matrix.
+
+    for i in range(len(array)):
+        new_row=[] #Zero row matrix
+        for j in range(len(array[i])):
+            new_row.append(array[i][j])
+        new_array.append(new_row)
+    return new_array
+
+def array_copy(array,start=0):
+    '''This function copies any 1D matrix or array to another dummy 1D matrix and returns as 1D array.
+        Input -  1D array:
+        Return -  1D array of same variables.'''
+    new_array=[]
+    for j in range(len(array)):
+        new_array.append(array[j])
+    return new_array
+
+
+def partial_pivoting(M,B,index):
+    ''' This present function uses Partial pivoting method to reduce round-off error.'''
+    ''' Input -  2D array, 1D array, integer: index value of starting point for partial pivoting.
+        return -  Partial pivoted - 2D array , 1D array'''
+
+    abs_array=[]
+    #copy M
+    copy_M=matrix_copy(M)
+    copy_B=array_copy(B)
+
+    for row in M[index:]:
+        element=row[index]
+        abs_array.append(abs(element))
+
+
+    #finding max rows..
+    max_value_index=abs_array.index(max(abs_array))
+    min_value_index=abs_array.index(min(abs_array))
+
+    #changing the rows:
+    M[index+max_value_index]=copy_M[index+min_value_index]
+    B[index+max_value_index]=copy_B[index+min_value_index]
+    M[index+min_value_index]=copy_M[index+max_value_index]
+    B[index+min_value_index]=copy_B[index+max_value_index]
+
+    return M,B
+
+def matrix_row_negative_addition(row1,row2,coef1,coef2,M,B):
+
+    copy_M=matrix_copy(M)
+    first_row=array_copy(M[row1])
+    second_row=array_copy(M[row2])
+    copy_B=array_copy(B)
+    copy_B_first_row=copy_B[row1]
+    copy_B_second_row=copy_B[row2]
+
+    #Multiply
+    for i in range(len(first_row)):
+        first_row[i]=float(first_row[i]*coef1)
+        second_row[i]=float(second_row[i]*coef2)
+
+    copy_B_first_row=float(copy_B_first_row*coef1)
+    copy_B_second_row=float(copy_B_second_row*coef2)
+
+    for i in range(len(first_row)):
+        second_row[i]=float(second_row[i]-first_row[i])
+
+    copy_B_second_row=float(copy_B_second_row-copy_B_first_row)
+
+    M[row2]=second_row
+    B[row2]=copy_B_second_row
+
+    return M,B
+
+def gaussian_elimination_step(M,B,index):
+    ''' This part is one of the main functions of whole Gaussian elimination process'''
+    ''' Input - 2D array, 1D array, integer: index number'''
+    A=M[index][index]
+    coef_array=[]
+    for i in range(len(M)):
+        coef_array.append(M[i][index]/A)
+    return coef_array
+
+def final_gaussian_elimination(M,B):
+    N=len(M)-1
+    for i in range(N):
+        M,B=partial_pivoting(M,B,i)
+        f=gaussian_elimination_step(M,B,i)
+        for j in range(1,N-i+1):
+            M,B=matrix_row_negative_addition(i,i+j,f[i+j],1,M,B)
+    return M,B
+
+#This part contains backward substituion:
+'''For this part I used any method of root finding.'''
+
+def backward_diff(M,X,B,index,virt_f,x0,x1):
+    ''' Returns backward differentiation of input function.'''
+    return float(virt_f(M,X,B,x1,index)-virt_f(M,X,B,x0,index))/float(x1-x0)
+
+
+def secant_method(M,X,B,index,x_0,x_1,virt_f,tolerance):
+    ''' Secant method function input: inital boundary points as x_0 and x_1
+        given fucntion and tolerance for stopping iteration'''
+    while abs(virt_f(M,X,B,x_1,index))>tolerance: # if function approximates to zero or smaller than tolerance then  breake.
+        x_2=x_1-float(virt_f(M,X,B,x_1,index))/backward_diff(M,X,B,index,virt_f,x_0,x_1)
+        x_0=x_1
+        x_1=x_2
+    return x_2
+
+def virtual_function(M,X,B,x,index):
+    '''This virtual function is important part for finding solution using secant method.
+        Instead of doing backward substituion analyticly, I solved it using Secant method and solution matrix.
+        input of virutal function is depened on x and index number,
+         such as at given index number the member of  X[solution array] array is changes by given x value which predicted by
+         secant method.'''
+
+    sum=0
+    for i in range(len(M)):
+
+        if i==index:
+            sum+=M[index][i]*x
+        else:
+            sum+=M[index][i]*X[i]
+
+    sum=sum-B[index]
+    return sum
+
+def backward_substituion(M,B):
+    '''This is nothing but just analytical version of Backward Substituion for testing numerical function.
+       I just did not wanted to delete it.'''
+    N=len(M)-1
+
+    #first step
+    sol_array=np.zeros((len(M)),dtype=float)
+    sol_array[N]=B[N]/M[N][N]
+
+    #second step:
+    solution=(B[N-1]-sol_array[N]*M[N-1][N])/M[N-1][N-1]
+    sol_array[N-1]=(solution)
+
+    #third step
+    solution=(B[N-2]-sol_array[N]*M[N-2][N]-sol_array[N-1]*M[N-2][N-1])/M[N-2][N-2]
+    sol_array[N - 2] = (solution)
+    return sol_array
+
+def numerical_bacward_substituion(M,B):
+    ''' Numerical Backward Substitution which uses virtual function which generated by the final triangle matrix.
+        Input - 2D array, 1D array,  this matrices should be the final form of Gaussian elimination.
+        Return - 1D array, solution..'''
+    N = len(M) - 1
+
+    sol_array = np.zeros((len(M)), dtype=float)  #this is solution array which is zero at first step.
+    for i in reversed(range(len(M))):
+        sol_array[i]=secant_method(M,sol_array,B,i,-100, 100, virtual_function, 0.000001)
+
+    return sol_array
+
+
+#================================Mathematical Operations================================================================
+''' This part generates solution array by using coded methods.
+    .Gaussian Elimination by Partial Pivoting and Secant method for Bacward Substitution.'''
+R_operation=matrix_copy(R) #Copy array for not fracturing given array in Gaussian elimination process.
+V_operation=array_copy(V)
+print("======Problem 5.1================================")
+print("Gaussian Elimination by Partial Pivoting.")
+print("Numerical Backward Substitution by Secant Method. ")
+print("Given matrice R:-----------------")
+for i in R:
+    print(i)
+print("Given matrice V:-----------------")
+print(V)
+
+R_gaus,V_gaus=final_gaussian_elimination(R_operation,V_operation)
+print("Final matrices by Gaussian Elimination.")
+print("Triangular matrix R:--------------")
+for j in R_gaus:
+    print(j)
+print("matrix V:")
+print(V_gaus)
+I_matrix=numerical_bacward_substituion(R_operation,V_operation)
+print("Solution by numerical methods I matrix:")
+print(I_matrix)
+
+print("This part contains test for R*I=V:-----------")
+print(R.dot(I_matrix))
+
+##Analytical solution.
+print("Analyitcal solution by inverse of matrix R. R^(-1)V=i")
+print("Inverse of R:")
+inverse_of_R=np.linalg.inv(R)
+print(inverse_of_R)
+print("i=R^(-1)*V")
+print(inverse_of_R.dot(V))
+
